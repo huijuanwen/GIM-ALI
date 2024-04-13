@@ -1,0 +1,27 @@
+Data = read.table(Input,header=TRUE)
+
+Data$Bonferroni =
+      p.adjust(Data$Raw.p,
+               method = "bonferroni")
+
+Data$BH =
+      signif(p.adjust(Data$Raw.p,
+               method = "BH"),
+             4)
+
+Data$Holm =
+      p.adjust(Data$ Raw.p,
+               method = "holm")
+
+Data$Hochberg =
+      p.adjust(Data$ Raw.p,
+               method = "hochberg")
+
+Data$Hommel =
+      p.adjust(Data$ Raw.p,
+               method = "hommel")
+
+Data$BY =
+      signif(p.adjust(Data$ Raw.p,
+               method = "BY"),
+             4)

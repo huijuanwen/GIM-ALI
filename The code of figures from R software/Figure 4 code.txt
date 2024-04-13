@@ -1,0 +1,74 @@
+library("org.Hs.eg.db")    
+inputFile="diff.txt"        
+rt=read.table(inputFile,sep="\t",check.names=F,header=T)    
+rt=rt[,c(1,2)]
+genes=as.vector(rt[,1])
+entrezIDs <- mget(genes, org.Hs.egSYMBOL2EG, ifnotfound=NA)    
+entrezIDs <- as.character(entrezIDs)
+
+out=cbind(rt,entrezID=entrezIDs)
+write.table(out,file="id.txt",sep="\t",quote=F,row.names=F)
+
+pvalueFilter=0.05        
+qvalueFilter=0.05       
+rt=read.table("id.txt",sep="\t",header=T,check.names=F) 
+rt=rt[is.na(rt[,"entrezID"])==F,]                    
+gene=rt$entrezID
+geneFC=rt$logFC
+#geneFC=2^geneFC
+names(geneFC)=gene
+
+colorSel="qvalue"
+if(qvalueFilter>0.05){
+  colorSel="pvalue"
+}
+
+kk=enrichGO(gene = gene,OrgDb = org.Hs.eg.db, pvalueCutoff =1, qvalueCutoff = 1, ont="all", readable =T)
+GO=as.data.frame(kk)
+GO=GO[(GO$pvalue<pvalueFilter & GO$qvalue<qvalueFilter),]
+write.table(GO,file="GO上.txt",sep="\t",quote=F,row.names = F)
+showNum=10
+if(nrow(GO)<30){
+  showNum=nrow(GO)
+}
+pdf(file="circosgo.pdf",width = 11,height = 7)
+cnet=cnetplot(kk, 
+              vertex.size = 10,
+              edge.width = 1,
+              foldChange=geneFC, showCategory = 5, circular = TRUE, colorEdge = TRUE)
+print(cnet)
+dev.off()
+
+
+
+
+
+rt=read.table("id.txt",sep="\t",header=T,check.names=F) 
+rt=rt[is.na(rt[,"entrezID"])==F,]  
+colnames(rt)[1]="Gene"
+gene=rt$entrezID
+geneFC=rt$logFC
+#geneFC=2^geneFC
+names(geneFC)=gene
+colorSel="qvalue"
+if(qvalueFilter>0.05){
+  colorSel="pvalue"
+}
+kk <- enrichKEGG(gene = gene, organism = "hsa", pvalueCutoff =1, qvalueCutoff =1)
+KEGG=as.data.frame(kk)
+KEGG$geneID=as.character(sapply(KEGG$geneID,function(x)paste(rt$Gene[match(strsplit(x,"/")[[1]],as.character(rt$entrezID))],collapse="/")))
+KEGG=KEGG[(KEGG$pvalue<pvalueFilter & KEGG$qvalue<qvalueFilter),]
+write.table(KEGG,file="KEGG下.txt",sep="\t",quote=F,row.names = F)
+showNum=10
+if(nrow(KEGG)<showNum){
+  showNum=nrow(KEGG)
+}
+
+
+pdf(file="circoskegg.pdf",width = 11,height = 7)
+kkx=setReadable(kk, 'org.Hs.eg.db', 'ENTREZID')
+cnetplot(kkx, 
+         vertex.size = 10,
+         edge.width = 1,
+         foldChange=geneFC,showCategory = 5, circular = TRUE, colorEdge = TRUE,node_label="all")
+dev.off()

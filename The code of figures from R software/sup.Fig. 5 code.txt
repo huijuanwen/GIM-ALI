@@ -1,0 +1,39 @@
+
+library(limma)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(enrichplot)
+
+diffFile="all.txt"           
+gmtFile="c2.cp.kegg.v7.4.symbols.gmt"
+
+rt=read.table(diffFile, header=T, sep="\t", check.names=F)
+rt=rt[order(rt$logFC, decreasing=T),]
+logFC=as.vector(rt[,2])
+names(logFC)=as.vector(rt[,1])
+
+gmt=read.gmt(gmtFile)
+
+kk=GSEA(logFC, TERM2GENE=gmt, pvalueCutoff=1)
+kkTab=as.data.frame(kk)
+kkTab=kkTab[kkTab$p.adjust<0.05,]
+write.table(kkTab,file="GSEA.result.txt",sep="\t",quote=F,row.names = F)
+
+termNum=5    
+kkUp=kkTab[kkTab$NES>0,]
+if(nrow(kkUp)>=termNum){
+	showTerm=row.names(kkUp)[1:termNum]    
+	gseaplot=gseaplot2(kk, showTerm, base_size=8, title="Enriched in treat group")
+	pdf(file="GSEA.treat.pdf", width=8, height=6)
+	print(gseaplot)
+	dev.off()
+}
+
+kkDown=kkTab[kkTab$NES<0,]
+if(nrow(kkDown)>=termNum){
+	showTerm=row.names(kkDown)[1:termNum]       
+	gseaplot=gseaplot2(kk, showTerm, base_size=8, title="Enriched in control group")
+	pdf(file="GSEA.con.pdf", width=8, height=6)
+	print(gseaplot)
+	dev.off()
+}

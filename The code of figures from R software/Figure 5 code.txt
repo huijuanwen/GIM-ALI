@@ -1,0 +1,54 @@
+library("org.Hs.eg.db")    
+inputFile="diff.txt"        
+rt=read.table(inputFile,sep="\t",check.names=F,header=T)    
+rt=rt[,c(1,2)]
+genes=as.vector(rt[,1])
+entrezIDs <- mget(genes, org.Hs.egSYMBOL2EG, ifnotfound=NA)    
+entrezIDs <- as.character(entrezIDs)
+
+out=cbind(rt,entrezID=entrezIDs)
+write.table(out,file="id.txt",sep="\t",quote=F,row.names=F)
+
+rt=read.table("id.txt",sep="\t",header=T,check.names=F) 
+rt=rt[is.na(rt[,"entrezID"])==F,]  
+colnames(rt)[1]="Gene"
+gene=rt$entrezID
+geneFC=rt$logFC
+#geneFC=2^geneFC
+names(geneFC)=gene
+colorSel="qvalue"
+if(qvalueFilter>0.05){
+  colorSel="pvalue"
+}
+kk <- enrichKEGG(gene = gene, organism = "hsa", pvalueCutoff =1, qvalueCutoff =1)
+KEGG=as.data.frame(kk)
+KEGG$geneID=as.character(sapply(KEGG$geneID,function(x)paste(rt$Gene[match(strsplit(x,"/")[[1]],as.character(rt$entrezID))],collapse="/")))
+KEGG=KEGG[(KEGG$pvalue<pvalueFilter & KEGG$qvalue<qvalueFilter),]
+write.table(KEGG,file="KEGG下.txt",sep="\t",quote=F,row.names = F)
+
+showNum=20
+if(nrow(KEGG)<showNum){
+	showNum=nrow(KEGG)
+}
+
+
+pdf(file="bubble.pdf", width = 9, height = 7)
+dotplot(kk, showCategory=showNum, orderBy="GeneRatio", label_format=130, color=colorSel)
+dev.off()
+
+
+library("plotrix")         
+inputFile="input.txt"      
+outFile="pie.pdf"          
+
+rt=read.table(inputFile,header=T,sep="\t",check.names=F)
+x=rt[,2]
+labels=as.character(rt[,1])
+
+piepercent=paste(round(100*x/sum(x), 2), "%")
+labels=paste0(labels,"\n",piepercent)
+
+pdf(file = outFile,width=7,height=6)           
+pie3D(x, labels = labels, height=0.1, labelcex=0.8,
+      explode =0.1, theta=0.85)  
+dev.off()

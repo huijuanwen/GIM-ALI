@@ -1,0 +1,244 @@
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(ggplot2)
+library(circlize)
+library(RColorBrewer)
+library(dplyr)
+library(ComplexHeatmap)
+
+pvalueFilter=0.05     
+qvalueFilter=0.05 
+
+colorSel="qvalue"
+if(qvalueFilter>0.05){
+	colorSel="pvalue"
+}
+	
+rt=read.table("diff.txt", header=T, sep="\t", check.names=F)   
+
+genes=unique(as.vector(rt[,1]))
+entrezIDs=mget(genes, org.Hs.egSYMBOL2EG, ifnotfound=NA)
+entrezIDs=as.character(entrezIDs)
+rt=data.frame(genes, entrezID=entrezIDs)
+gene=entrezIDs[entrezIDs!="NA"]        
+#gene=gsub("c\\(\"(\\d+)\".*", "\\1", gene)
+
+kk <- enrichKEGG(gene=gene, organism="hsa", pvalueCutoff=1, qvalueCutoff=1)
+KEGG=as.data.frame(kk)
+KEGG$geneID=as.character(sapply(KEGG$geneID,function(x)paste(rt$genes[match(strsplit(x,"/")[[1]],as.character(rt$entrezID))],collapse="/")))
+KEGG=KEGG[(KEGG$pvalue<pvalueFilter & KEGG$qvalue<qvalueFilter),]
+write.table(KEGG, file="KEGG.txt", sep="\t", quote=F, row.names = F)
+
+showNum=20
+if(nrow(KEGG)<showNum){
+	showNum=nrow(KEGG)
+}
+
+pdf(file="bubble.pdf", width = 9, height = 7)
+dotplot(kk, showCategory=showNum, orderBy="GeneRatio", label_format=130, color=colorSel)
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#   Data plots for selected GEO samples
+rm(list=ls())
+library(GEOquery)
+library(limma)
+library(umap)
+# load series and platform data from GEO
+gset <- getGEO("GSE78523", GSEMatrix =TRUE, getGPL=FALSE)
+if (length(gset) > 1) idx <- grep("GPL18990", attr(gset, "names")) else idx <- 1
+gset <- gset[[idx]]
+ex <- exprs(gset)
+# log2 transform
+qx <- as.numeric(quantile(ex, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm=T))
+LogC <- (qx[5] > 100) ||
+  (qx[6]-qx[1] > 50 && qx[2] > 0)
+if (LogC) { ex[which(ex <= 0)] <- NaN
+ex <- log2(ex) }
+
+
+library(AnnoProbe)
+gpl='GPL18990'
+probe2gene=idmap(gpl,type = 'pipe')
+head(probe2gene)
+ids<-probe2gene
+setwd("F:/bioinformation analysis/GEOdatabase")
+gpl<-data.table::fread("IM_GSE78523//GPL18990-3879.txt",header = T,stringsAsFactors = F)
+colnames(gpl) 
+ids=gpl[,c(1,15)]
+colnames(ids)<-c("probe_id","symbol")
+head(ids)
+
+dat1<-as.data.frame(ex)
+dat1$probe_id<-rownames(dat1)
+dat1<-merge(dat1,ids,by="probe_id")
+dat1=dat1[!duplicated(dat1$symbol),]
+rownames(dat1)<-dat1$symbol 
+dat1 <- na.omit(dat1) 
+
+
+gset <- getGEO("GSE78523", GSEMatrix =TRUE, getGPL=FALSE)
+pd <- pData(gset[[1]])  
+metadata<-read.table("./IM_GSE163416/metadata.txt",header = T,stringsAsFactors = F,sep = "\t")
+colnames(gene_exp_matrix)<-metadata[,2]
+
+
+library(reshape2)
+exp<-dat1[,-1]
+head(exp)
+exp_L = melt(exp)
+head(exp_L)
+colnames(exp_L)=c('symbol','sample','value')
+head(exp_L)
+
+group_list<-pd[,c(1,2,40)]
+head(group_list)
+group<-group_list[,3]
+exp_L$group = rep(group,each=nrow(exp))
+head(exp_L)
+
+library(ggplot2)
+p = ggplot(exp_L,
+           aes(x=sample,y=value,fill=group))+geom_boxplot()
+print(p)
+
+p=ggplot(exp_L,aes(x=sample,y=value,fill=group))+geom_boxplot()+
+  stat_summary(fun.y="mean",geom="point",shape=23,size=3,fill="red")+
+  theme_set(theme_set(theme_bw(base_size=20)))+
+  theme(text=element_text(face='bold'),axis.text.x=element_text(angle=30,hjust=1),axis.title=element_blank())
+print(p)
+
+
+nodePar <- list(lab.cex = 0.6, pch = c(NA, 19), 
+                cex = 0.7, col = "blue")
+
+hc=hclust(dist(t(exp)))
+par(mar=c(5,5,5,10)) 
+
+plot(as.dendrogram(hc), nodePar = nodePar,  horiz = TRUE)
+
+
+library(ggfortify)
+
+df=as.data.frame(t(exp))
+dim(df)
+dim(exp)
+exp[1:6,1:6]
+df[1:6,1:6]
+df$group=group
+autoplot(prcomp(df[,1:(ncol(df)-1)] ), data=df,colour = 'group')
+
+gene_exp_matrix<-data.frame(exp)
+gene_exp_matrix <-exp[,c(1:3,16:21,40:45,4:9,22:31)]
+gene_exp_matrix['GAPDH',]
+gene_exp_matrix['ACTB',]
+gene_exp_matrix<-cbind(group3,exprSet)
+gene_exp_matrix[,-1]
+
+save(gene_exp_matrix,file = ".//IM_GSE78523//GSE78523_gene_exp_output.Rdata")
+
+options(stringsAsFactors = F)
+load(file = ".//IM_GSE78523//GSE78523_gene_exp_output.Rdata")
+
+dim(gene_exp_matrix)
+library(limma)
+
+exp<-data.frame(t(gene_exp_matrix[,3:28343])
+group<-gene_exp_matrix$group2
+design <- model.matrix(~0+factor(group))
+colnames(design)=levels(factor(group))
+rownames(design)=colnames(exp)
+
+##contrast.matrix<-makeContrasts(paste0(c("IM","normal"),collapse = "-"),levels = design)
+##
+contrast.matrix<-makeContrasts(CIM_GC-CIM_con,IIM_GC-IIM_con,CIM_con-Healthy,IIM_con-Healthy,CIM_GC-Healthy,IIM_GC-Healthy,levels = design)
+contrast.matrix
+
+##step1
+
+fit <- lmFit(exp,design)
+##step2
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2)  
+##eBayes() with trend=TRUE
+##step3
+tempOutput = topTable(fit2, coef=6, n=Inf)
+nrDEG = na.omit(tempOutput) 
+#write.csv(nrDEG2,"limma_notrend.results.csv",quote = F)
+nrDEG$sig<-"none"
+nrDEG[which(nrDEG$logFC >= 1 & nrDEG$P.Value < 0.01),'sig'] <- 'up'
+nrDEG[which(nrDEG$logFC <= -1 & nrDEG$P.Value < 0.01),'sig'] <- 'down'
+
+nrDEG_IIM_GC_healthy <-nrDEG
+nrDEG_IIM_GC_healthy_select <- subset(nrDEG, sig %in% c('up', 'down'))
+
+
+
+
+
+
+
+
+
+
+
+library(ConsensusClusterPlus) 
+expFile="diffGeneExp.txt"       
+
+setwd(workDir)    
+
+data=read.table(expFile, header=T, sep="\t", check.names=F, row.names=1)
+data=as.matrix(data)
+
+group=sapply(strsplit(colnames(data),"\\_"), "[", 2)
+data=data[,group=="treat"]
+
+maxK=9
+results=ConsensusClusterPlus(data,
+              maxK=maxK,
+              reps=50,
+              pItem=0.8,
+              pFeature=1,
+              title=workDir,
+              clusterAlg="pam",
+              distance="euclidean",
+              seed=123456,
+              plot="png")
+
+
+clusterNum=2       
+cluster=results[[clusterNum]][["consensusClass"]]
+cluster=as.data.frame(cluster)
+colnames(cluster)=c("m6Acluster")
+letter=c("A","B","C","D","E","F","G")
+uniqClu=levels(factor(cluster$m6Acluster))
+cluster$m6Acluster=letter[match(cluster$m6Acluster, uniqClu)]
+outTab=cbind(t(data), cluster)
+outTab=rbind(ID=colnames(outTab), outTab)
+write.table(outTab, file="cluster.txt", sep="\t", quote=F, col.names=F)
+
+
+
+
+
